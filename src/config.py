@@ -21,9 +21,13 @@ class Config:
     EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "not-needed")
     EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "Nexus-bge-m3-opensearch-embeddings")
 
-    # Model token limits
-    MAX_TOKENS_DEFAULT = 32000
-    MAX_TOKENS_WRITER = 40000
+    # Model token limits (adjusted for 64k context length local LLM)
+    # Using ~80% of context for output to leave room for input
+    MAX_TOKENS_DEFAULT = int(os.getenv("MAX_TOKENS_DEFAULT", "50000"))
+    MAX_TOKENS_WRITER = int(os.getenv("MAX_TOKENS_WRITER", "55000"))
+
+    # Context length for the local LLM
+    LLM_CONTEXT_LENGTH = int(os.getenv("LLM_CONTEXT_LENGTH", "64000"))
 
 
 def get_model_config() -> dict:

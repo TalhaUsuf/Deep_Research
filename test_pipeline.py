@@ -3,6 +3,7 @@
 import asyncio
 import os
 import warnings
+from datetime import datetime
 
 # Set environment variables
 os.environ["TAVILY_API_KEY"] = "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"
@@ -111,6 +112,36 @@ async def run_with_streaming(graph, query: str, thread_config: dict):
     return final_result
 
 
+def save_report_to_file(report: str, query: str, filename: str = None) -> str:
+    """Save the final report to a markdown file.
+
+    Args:
+        report: The final report content
+        query: The original research query
+        filename: Optional custom filename (auto-generated if not provided)
+
+    Returns:
+        The filename where the report was saved
+    """
+    if filename is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"research_report_{timestamp}.md"
+
+    # Create report with metadata header
+    full_report = f"""---
+query: "{query}"
+generated_at: {datetime.now().isoformat()}
+---
+
+{report}
+"""
+
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(full_report)
+
+    return filename
+
+
 async def main():
     """Run a test query through the research pipeline with streaming."""
     print("=" * 60)
@@ -122,6 +153,9 @@ async def main():
     print(f"\nConfiguration:")
     print(f"  LLM Base URL: {Config.LLM_BASE_URL}")
     print(f"  LLM Model: {Config.LLM_MODEL}")
+    print(f"  LLM Context Length: {Config.LLM_CONTEXT_LENGTH:,} tokens")
+    print(f"  Max Tokens (Default): {Config.MAX_TOKENS_DEFAULT:,}")
+    print(f"  Max Tokens (Writer): {Config.MAX_TOKENS_WRITER:,}")
     print(f"  Embedding Base URL: {Config.EMBEDDING_BASE_URL}")
     print(f"  Embedding Model: {Config.EMBEDDING_MODEL}")
     print()
@@ -151,17 +185,29 @@ async def main():
         print("FINAL REPORT")
         print("=" * 60)
 
+        final_report = None
+
         if result and "final_report" in result:
-            print(result["final_report"])
+            final_report = result["final_report"]
         else:
             # Fallback: get the final state
             final_state = await full_agent.aget_state(thread)
             if final_state and final_state.values and "final_report" in final_state.values:
-                print(final_state.values["final_report"])
-            else:
-                print("No final report generated.")
-                if final_state and final_state.values:
-                    print("Available keys:", list(final_state.values.keys()))
+                final_report = final_state.values["final_report"]
+
+        if final_report:
+            print(final_report)
+
+            # Save the report to a file
+            print("\n" + "=" * 60)
+            print("SAVING REPORT")
+            print("=" * 60)
+            report_filename = save_report_to_file(final_report, query)
+            print(f"✅ Report saved to: {report_filename}")
+        else:
+            print("No final report generated.")
+            if final_state and final_state.values:
+                print("Available keys:", list(final_state.values.keys()))
 
     except Exception as e:
         print(f"\nError occurred: {type(e).__name__}: {e}")
