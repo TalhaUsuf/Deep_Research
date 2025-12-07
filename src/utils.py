@@ -44,7 +44,9 @@ _model_config = get_model_config()
 summarization_model = init_chat_model(**_model_config)
 writer_model = init_chat_model(**_model_config, max_tokens=Config.MAX_TOKENS_DEFAULT)
 tavily_client = TavilyClient()
-MAX_CONTEXT_LENGTH = 250000
+# Use configured context length for content truncation (in characters, ~4 chars per token)
+# Leave headroom for prompts and model output (use ~60% of context for input content)
+MAX_CONTEXT_LENGTH = int(Config.LLM_CONTEXT_LENGTH * 4 * 0.6)
 
 # ===== SEARCH FUNCTIONS =====
 
