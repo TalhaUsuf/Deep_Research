@@ -19,6 +19,7 @@ from langgraph.types import Command
 
 from deep_research.prompts import transform_messages_into_research_topic_human_msg_prompt, draft_report_generation_prompt, clarify_with_user_instructions
 from deep_research.state_scope import AgentState, ResearchQuestion, AgentInputState, DraftReport
+from deep_research.config import get_model_config
 
 # ===== UTILITY FUNCTIONS =====
 
@@ -28,9 +29,10 @@ def get_today_str() -> str:
 
 # ===== CONFIGURATION =====
 
-# Initialize model
-model = init_chat_model(model="openai:gpt-5")
-creative_model = init_chat_model(model="openai:gpt-5")
+# Initialize models with centralized config
+_model_config = get_model_config()
+model = init_chat_model(**_model_config)
+creative_model = init_chat_model(**_model_config)
 
 # ===== WORKFLOW NODES =====
 

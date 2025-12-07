@@ -33,6 +33,7 @@ from deep_research.state_multi_agent_supervisor import (
     ResearchComplete
 )
 from deep_research.utils import get_today_str, think_tool, refine_draft_report
+from deep_research.config import get_model_config
 
 def get_notes_from_tool_calls(messages: list[BaseMessage]) -> list[str]:
     """Extract research notes from ToolMessage objects in supervisor message history.
@@ -67,8 +68,9 @@ except ImportError:
 
 # ===== CONFIGURATION =====
 
-supervisor_tools = [ConductResearch, ResearchComplete, think_tool,refine_draft_report]
-supervisor_model = init_chat_model(model="openai:gpt-5")
+supervisor_tools = [ConductResearch, ResearchComplete, think_tool, refine_draft_report]
+_model_config = get_model_config()
+supervisor_model = init_chat_model(**_model_config)
 supervisor_model_with_tools = supervisor_model.bind_tools(supervisor_tools)
 
 # System constants
