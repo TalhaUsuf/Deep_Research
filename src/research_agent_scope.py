@@ -13,12 +13,12 @@ from datetime import datetime
 from typing_extensions import Literal
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import HumanMessage, get_buffer_string
+from langchain_core.messages import HumanMessage, AIMessage, get_buffer_string
 from langgraph.graph import StateGraph, START, END
-from langgraph.types import Command
+from langgraph.types import Command, interrupt
 
 from deep_research.prompts import transform_messages_into_research_topic_human_msg_prompt, draft_report_generation_prompt, clarify_with_user_instructions
-from deep_research.state_scope import AgentState, ResearchQuestion, AgentInputState, DraftReport
+from deep_research.state_scope import AgentState, ResearchQuestion, AgentInputState, DraftReport, ClarifyWithUser
 from deep_research.config import get_model_config
 
 # ===== UTILITY FUNCTIONS =====
@@ -37,14 +37,12 @@ creative_model = init_chat_model(**_model_config)
 # ===== WORKFLOW NODES =====
 
 def clarify_with_user(state: AgentState) -> Command[Literal["write_research_brief"]]:
-    #uncomment if you want to enable this module  
     """
     Determine if the user's request contains sufficient information to proceed with research.
 
     Uses structured output to make deterministic decisions and avoid hallucination.
-    Routes to either research brief generation or ends with a clarification question.
-    """
-
+    If clarification is needed, uses interrupt() to pause execution and wait for user input.
+    The workflow will resume when the user provides their response via Command(resume=...).
     """
     # Set up structured output model
     structured_output_model = model.with_structured_output(ClarifyWithUser)
@@ -52,22 +50,38 @@ def clarify_with_user(state: AgentState) -> Command[Literal["write_research_brie
     # Invoke the model with clarification instructions
     response = structured_output_model.invoke([
         HumanMessage(content=clarify_with_user_instructions.format(
-            messages=get_buffer_string(messages=state["messages"]), 
+            messages=get_buffer_string(messages=state["messages"]),
             date=get_today_str()
         ))
     ])
 
     # Route based on clarification need
     if response.need_clarification:
+        # Use interrupt() to pause execution and wait for user input
+        # The interrupt message will be shown to the user, and they can resume
+        # with Command(resume="their response")
+        user_response = interrupt({
+            "question": response.question,
+            "verification": response.verification,
+            "type": "clarification_needed"
+        })
+
+        # When resumed, user_response contains the user's answer
+        # Add the clarification Q&A to messages and continue
         return Command(
-            goto=END, 
-            update={"messages": [AIMessage(content=response.question)]}
+            goto="write_research_brief",
+            update={
+                "messages": [
+                    AIMessage(content=response.question),
+                    HumanMessage(content=user_response)
+                ]
+            }
         )
     else:
-    """
-    return Command(
-        goto="write_research_brief"
-    )
+        # No clarification needed, proceed directly to research brief
+        return Command(
+            goto="write_research_brief"
+        )
 
 def write_research_brief(state: AgentState) -> Command[Literal["write_draft_report"]]:
     """

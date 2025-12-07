@@ -1,4 +1,4 @@
-"""Test script for the local LLM pipeline with streaming and graph visualization."""
+"""Test script for the local LLM pipeline with streaming, graph visualization, and interrupt handling."""
 
 import asyncio
 import os
@@ -13,6 +13,7 @@ warnings.filterwarnings("ignore")
 
 from langchain_core.messages import HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 
 from deep_research.research_agent_full import deep_researcher_builder
 
@@ -47,67 +48,131 @@ def save_graph_as_png(graph, filename: str = "workflow_graph.png"):
         return False
 
 
-async def run_with_streaming(graph, query: str, thread_config: dict):
-    """Run the research pipeline with streaming output.
+async def check_for_interrupt(graph, thread_config: dict) -> dict | None:
+    """Check if the graph is in an interrupted state and return interrupt info.
+
+    Args:
+        graph: Compiled LangGraph graph
+        thread_config: Thread configuration for checkpointing
+
+    Returns:
+        Dictionary with interrupt info if interrupted, None otherwise
+    """
+    state = await graph.aget_state(thread_config)
+
+    if state and state.tasks:
+        for task in state.tasks:
+            if hasattr(task, 'interrupts') and task.interrupts:
+                for interrupt_info in task.interrupts:
+                    if hasattr(interrupt_info, 'value'):
+                        return interrupt_info.value
+    return None
+
+
+async def run_with_streaming_and_interrupt(graph, query: str, thread_config: dict, auto_responses: dict = None):
+    """Run the research pipeline with streaming output and interrupt handling.
 
     Args:
         graph: Compiled LangGraph graph
         query: The research query
         thread_config: Thread configuration for checkpointing
+        auto_responses: Optional dict mapping interrupt types to automatic responses for testing
+
+    Returns:
+        Final result from the workflow
     """
     print("\n" + "=" * 60)
-    print("STREAMING WORKFLOW EXECUTION")
+    print("STREAMING WORKFLOW EXECUTION (with Interrupt Support)")
     print("=" * 60 + "\n")
 
     final_result = None
+    current_input = {"messages": [HumanMessage(content=query)]}
 
-    # Use astream to get updates as the workflow executes
-    async for event in graph.astream(
-        {"messages": [HumanMessage(content=query)]},
-        config=thread_config,
-        stream_mode="updates"
-    ):
-        # event is a dict with node name as key and output as value
-        for node_name, node_output in event.items():
-            print(f"\n{'─' * 40}")
-            print(f"📍 Node: {node_name}")
-            print(f"{'─' * 40}")
+    while True:
+        # Use astream to get updates as the workflow executes
+        async for event in graph.astream(
+            current_input,
+            config=thread_config,
+            stream_mode="updates"
+        ):
+            # event is a dict with node name as key and output as value
+            for node_name, node_output in event.items():
+                print(f"\n{'─' * 40}")
+                print(f"📍 Node: {node_name}")
+                print(f"{'─' * 40}")
 
-            # Print relevant information from the node output
-            if isinstance(node_output, dict):
-                # Check for messages
-                if "messages" in node_output:
-                    messages = node_output["messages"]
-                    if messages:
-                        last_msg = messages[-1] if isinstance(messages, list) else messages
-                        if hasattr(last_msg, "content"):
-                            content = last_msg.content
-                            # Truncate long content for display
-                            if len(content) > 500:
-                                print(f"   Content: {content[:500]}...")
-                            else:
-                                print(f"   Content: {content}")
+                # Print relevant information from the node output
+                if isinstance(node_output, dict):
+                    # Check for messages
+                    if "messages" in node_output:
+                        messages = node_output["messages"]
+                        if messages:
+                            last_msg = messages[-1] if isinstance(messages, list) else messages
+                            if hasattr(last_msg, "content"):
+                                content = last_msg.content
+                                # Truncate long content for display
+                                if len(content) > 500:
+                                    print(f"   Content: {content[:500]}...")
+                                else:
+                                    print(f"   Content: {content}")
 
-                # Check for research brief
-                if "research_brief" in node_output and node_output["research_brief"]:
-                    brief = node_output["research_brief"]
-                    print(f"   Research Brief: {brief[:300]}..." if len(brief) > 300 else f"   Research Brief: {brief}")
+                    # Check for research brief
+                    if "research_brief" in node_output and node_output["research_brief"]:
+                        brief = node_output["research_brief"]
+                        print(f"   Research Brief: {brief[:300]}..." if len(brief) > 300 else f"   Research Brief: {brief}")
 
-                # Check for draft report
-                if "draft_report" in node_output and node_output["draft_report"]:
-                    print(f"   Draft Report Generated: {len(node_output['draft_report'])} characters")
+                    # Check for draft report
+                    if "draft_report" in node_output and node_output["draft_report"]:
+                        print(f"   Draft Report Generated: {len(node_output['draft_report'])} characters")
 
-                # Check for research findings
-                if "research_findings" in node_output and node_output["research_findings"]:
-                    findings = node_output["research_findings"]
-                    print(f"   Research Findings: {len(findings)} findings collected")
+                    # Check for research findings
+                    if "research_findings" in node_output and node_output["research_findings"]:
+                        findings = node_output["research_findings"]
+                        print(f"   Research Findings: {len(findings)} findings collected")
 
-                # Check for final report
-                if "final_report" in node_output and node_output["final_report"]:
-                    print(f"   ✅ Final Report Generated: {len(node_output['final_report'])} characters")
-                    final_result = node_output
+                    # Check for final report
+                    if "final_report" in node_output and node_output["final_report"]:
+                        print(f"   ✅ Final Report Generated: {len(node_output['final_report'])} characters")
+                        final_result = node_output
 
-            print()
+                print()
+
+        # Check if graph is interrupted
+        interrupt_info = await check_for_interrupt(graph, thread_config)
+
+        if interrupt_info:
+            print("\n" + "=" * 60)
+            print("⏸️  WORKFLOW INTERRUPTED - CLARIFICATION NEEDED")
+            print("=" * 60)
+
+            if isinstance(interrupt_info, dict):
+                if "question" in interrupt_info:
+                    print(f"\n🤔 Question: {interrupt_info['question']}")
+                if "verification" in interrupt_info:
+                    print(f"📋 Verification: {interrupt_info['verification']}")
+
+                interrupt_type = interrupt_info.get("type", "unknown")
+
+                # Check if we have an auto-response for this interrupt type
+                if auto_responses and interrupt_type in auto_responses:
+                    user_response = auto_responses[interrupt_type]
+                    print(f"\n🤖 Auto-response (for testing): {user_response}")
+                else:
+                    # In interactive mode, get user input
+                    print("\nPlease provide your response to continue:")
+                    user_response = input(">>> ").strip()
+
+                print(f"\n✅ Resuming workflow with response: {user_response[:100]}...")
+
+                # Resume the workflow with user's response
+                current_input = Command(resume=user_response)
+            else:
+                print(f"\nInterrupt info: {interrupt_info}")
+                print("Unable to handle this interrupt type automatically.")
+                break
+        else:
+            # No interrupt, workflow completed
+            break
 
     return final_result
 
@@ -143,9 +208,9 @@ generated_at: {datetime.now().isoformat()}
 
 
 async def main():
-    """Run a test query through the research pipeline with streaming."""
+    """Run a test query through the research pipeline with streaming and interrupt handling."""
     print("=" * 60)
-    print("Testing Local LLM Pipeline (Streaming Mode)")
+    print("Testing Local LLM Pipeline (Streaming Mode with Interrupts)")
     print("=" * 60)
 
     # Print configuration
@@ -160,7 +225,7 @@ async def main():
     print(f"  Embedding Model: {Config.EMBEDDING_MODEL}")
     print()
 
-    # Compile the agent with checkpointer
+    # Compile the agent with checkpointer (required for interrupt support)
     checkpointer = InMemorySaver()
     full_agent = deep_researcher_builder.compile(checkpointer=checkpointer)
 
@@ -169,17 +234,29 @@ async def main():
     save_graph_as_png(full_agent, "workflow_graph.png")
     print()
 
-    # Test query
+    # Test query - intentionally vague to trigger clarification
+    # Change to a more specific query to skip clarification
     query = "What are the main LLM quantization methods? Compare GPTQ, AWQ, and GGUF formats."
 
     print(f"Query: {query}")
     print("=" * 60)
 
-    # Run the agent with streaming
+    # Auto-responses for testing (optional)
+    # Comment out to enable interactive mode
+    auto_responses = {
+        "clarification_needed": "I want a comprehensive comparison covering accuracy, speed, memory usage, and ease of use. Focus on practical deployment scenarios."
+    }
+
+    # Run the agent with streaming and interrupt handling
     thread = {"configurable": {"thread_id": "test-1", "recursion_limit": 50}}
 
     try:
-        result = await run_with_streaming(full_agent, query, thread)
+        result = await run_with_streaming_and_interrupt(
+            full_agent,
+            query,
+            thread,
+            auto_responses=auto_responses  # Remove this line for interactive mode
+        )
 
         print("\n" + "=" * 60)
         print("FINAL REPORT")
@@ -206,7 +283,7 @@ async def main():
             print(f"✅ Report saved to: {report_filename}")
         else:
             print("No final report generated.")
-            if final_state and final_state.values:
+            if 'final_state' in dir() and final_state and final_state.values:
                 print("Available keys:", list(final_state.values.keys()))
 
     except Exception as e:
