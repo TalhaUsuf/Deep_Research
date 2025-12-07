@@ -17,6 +17,7 @@ from tavily import TavilyClient
 
 from deep_research.state_research import Summary
 from deep_research.prompts import summarize_webpage_prompt, report_generation_with_draft_insight_prompt
+from deep_research.config import get_model_config, Config
 
 # ===== UTILITY FUNCTIONS =====
 
@@ -39,8 +40,9 @@ def get_current_dir() -> Path:
 
 # ===== CONFIGURATION =====
 
-summarization_model = init_chat_model(model="openai:gpt-5")
-writer_model = init_chat_model(model="openai:gpt-5", max_tokens=32000)
+_model_config = get_model_config()
+summarization_model = init_chat_model(**_model_config)
+writer_model = init_chat_model(**_model_config, max_tokens=Config.MAX_TOKENS_DEFAULT)
 tavily_client = TavilyClient()
 MAX_CONTEXT_LENGTH = 250000
 

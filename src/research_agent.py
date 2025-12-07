@@ -14,6 +14,7 @@ from langchain.chat_models import init_chat_model
 from deep_research.state_research import ResearcherState, ResearcherOutputState
 from deep_research.utils import tavily_search, get_today_str, think_tool
 from deep_research.prompts import research_agent_prompt, compress_research_system_prompt, compress_research_human_message
+from deep_research.config import get_model_config, Config
 
 # ===== CONFIGURATION =====
 
@@ -21,11 +22,12 @@ from deep_research.prompts import research_agent_prompt, compress_research_syste
 tools = [tavily_search, think_tool]
 tools_by_name = {tool.name: tool for tool in tools}
 
-# Initialize models
-model = init_chat_model(model="openai:gpt-5")
+# Initialize models with centralized config
+_model_config = get_model_config()
+model = init_chat_model(**_model_config)
 model_with_tools = model.bind_tools(tools)
-summarization_model = init_chat_model(model="openai:gpt-5")
-compress_model = init_chat_model(model="openai:gpt-5", max_tokens=32000) # model="anthropic:claude-sonnet-4-20250514", max_tokens=64000
+summarization_model = init_chat_model(**_model_config)
+compress_model = init_chat_model(**_model_config, max_tokens=Config.MAX_TOKENS_DEFAULT)
 
 # ===== AGENT NODES =====
 
