@@ -44,8 +44,9 @@ def clarify_with_user(state: AgentState) -> Command[Literal["write_research_brie
     If clarification is needed, uses interrupt() to pause execution and wait for user input.
     The workflow will resume when the user provides their response via Command(resume=...).
     """
-    # Set up structured output model
-    structured_output_model = model.with_structured_output(ClarifyWithUser)
+    # Set up structured output model using json_mode instead of tool calls
+    # This is required for local LLMs that only support single tool calls
+    structured_output_model = model.with_structured_output(ClarifyWithUser, method="json_mode")
 
     # Invoke the model with clarification instructions
     response = structured_output_model.invoke([
@@ -90,8 +91,8 @@ def write_research_brief(state: AgentState) -> Command[Literal["write_draft_repo
     Uses structured output to ensure the brief follows the required format
     and contains all necessary details for effective research.
     """
-    # Set up structured output model
-    structured_output_model = model.with_structured_output(ResearchQuestion)
+    # Set up structured output model using json_mode for local LLM compatibility
+    structured_output_model = model.with_structured_output(ResearchQuestion, method="json_mode")
 
     # Generate research brief from conversation history
     response = structured_output_model.invoke([
@@ -113,8 +114,8 @@ def write_draft_report(state: AgentState) -> Command[Literal["__end__"]]:
 
     Synthesizes all research findings into a comprehensive final report
     """
-    # Set up structured output model
-    structured_output_model = creative_model.with_structured_output(DraftReport)
+    # Set up structured output model using json_mode for local LLM compatibility
+    structured_output_model = creative_model.with_structured_output(DraftReport, method="json_mode")
     research_brief = state.get("research_brief", "")
     draft_report_prompt = draft_report_generation_prompt.format(
         research_brief=research_brief,

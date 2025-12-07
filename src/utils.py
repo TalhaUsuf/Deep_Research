@@ -91,8 +91,8 @@ def summarize_webpage_content(webpage_content: str) -> str:
         Formatted summary with key excerpts
     """
     try:
-        # Set up structured output model for summarization
-        structured_model = summarization_model.with_structured_output(Summary)
+        # Set up structured output model for summarization using json_mode for local LLM compatibility
+        structured_model = summarization_model.with_structured_output(Summary, method="json_mode")
 
         # Generate summary
         summary = structured_model.invoke([

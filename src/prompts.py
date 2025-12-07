@@ -86,6 +86,11 @@ Guidelines:
 
 REMEMBER:
 Make sure the research brief is in the SAME language as the human messages in the message history.
+
+IMPORTANT: You MUST respond with a valid JSON object containing exactly this key:
+{{
+  "research_brief": "your detailed research question here"
+}}
 """
 
 research_agent_prompt =  """You are a research assistant conducting research on the user's input topic. For context, today's date is {date}.
@@ -507,6 +512,11 @@ Format the report in clear markdown with proper structure and include source ref
   [2] Source Title: URL
 - Citations are extremely important. Make sure to include these, and pay a lot of attention to getting these right. Users will often use these citations to look into more information.
 </Citation Rules>
+
+IMPORTANT: You MUST respond with a valid JSON object containing exactly this key:
+{{
+  "draft_report": "your complete draft report in markdown format here"
+}}
 """
 
 draft_report_generation_prompt = """Based on all the research in your knowledge base, create a comprehensive, well-structured answer to the overall research brief:
@@ -580,4 +590,9 @@ Format the report in clear markdown with proper structure and include source ref
   [2] Source Title: URL
 - Citations are extremely important. Make sure to include these, and pay a lot of attention to getting these right. Users will often use these citations to look into more information.
 </Citation Rules>
+
+IMPORTANT: You MUST respond with a valid JSON object containing exactly this key:
+{{
+  "draft_report": "your complete draft report in markdown format here"
+}}
 """
